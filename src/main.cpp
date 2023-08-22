@@ -178,7 +178,6 @@ class ConstantPool {
 			return entries[idx].Utf8.bytes;
 		}
 
-		
 		~ConstantPool() {
 			if(entries) {
 				delete entries;
@@ -395,12 +394,16 @@ class JavaClassFile {
 	string filename;
 	struct JavaClassHeader1 header1;
 	struct JavaClassHeader2 header2;
+	
 	ConstantPool* const_pool = nullptr;
 	uint16_t* interfaces = nullptr;
 	uint16_t fields_count = 0;
+	
 	FieldEntry* fields = nullptr;
 	uint16_t methods_count = 0;
+	
 	MethodEntry* methods = nullptr;
+	
 	uint16_t attributes_count = 0;
 	AttributeInfo* attributes = nullptr;
 
@@ -416,7 +419,9 @@ struct CodeAttribute {
 
 enum JavaOpCodes : uint8_t {
 	GETSTATIC = 0xB2,
+	SIPUSH    = 0x11,
 	LDC       = 0x12,
+	ILOAD_1   = 0x1b,
 	INVOKEVIRTUAL = 0xB6,
 	INVOKESTATIC = 0xB8,
 	RETURN    = 0xB1
@@ -439,6 +444,10 @@ struct StaticAction : public Action {
 
 struct ConstantAction : public Action {
 	ConstantPoolEntry entry;
+};
+
+struct ValueAction : public Action {
+	int entry;
 };
 
 class JavaExecutor {
@@ -579,7 +588,7 @@ class JavaExecutor {
 			   	action_stack.pop();
 			}
 		} else if (op == INVOKESTATIC) {
-			// cout << "Invoke static!" << endl;
+			cout << "Invoke static!" << endl;
 
 			cursor++;
 
@@ -598,20 +607,42 @@ class JavaExecutor {
 			ConstantPoolEntry name = klass->const_pool->entries[name_type_index.NameAndType.name_idx - 1];
 			ConstantPoolEntry descriptor = klass->const_pool->entries[name_type_index.NameAndType.descriptor_idx - 1];
 
-			// cout << "Class: " << entry << endl;
-			// cout << "Class index: " << class_index << endl;
-			// cout << "Class name: " << classname_index << endl;
-			// cout << "Name and type: " << name_type_index << endl;
-			// cout << "|- Name: " << name << endl;
-			// cout << "|- Descriptor: " << descriptor << endl;
+			cout << "Class: " << entry << endl;
+			cout << "Class index: " << class_index << endl;
+			cout << "Class name: " << classname_index << endl;
+			cout << "Name and type: " << name_type_index << endl;
+			cout << "|- Name: " << name << endl;
+			cout << "|- Descriptor: " << descriptor << endl;
 
 			run(*name.Utf8.bytes);
+		} else if (op == SIPUSH) {
+			cursor++;
+
+			uint8_t sh1 = codeptr[cursor];
+
+			cursor++;
+			
+			uint8_t sh2 = codeptr[cursor];
+
+			int num = (int)((sh1 << 8) | sh2);
+
+			cout << "Number is: " << num << endl;
+
+			ValueAction* value = new ValueAction;
+			value->id = CONSTANT;
+			value->entry = num;
+
+			action_stack.push(value);
+		} else if (op == ILOAD_1) {
+			cout << "Iload 1!" << endl;
+
+			cout << "Need a local variable array!" << endl;
 
 			exit(1);
 		} else if (op == RETURN) {
-			// cout << "Return!" << endl;
+			cout << "Return!" << endl;
 		} else {
-			cout << "Unknown instruction: " << hex << (uint32_t)op << endl;
+			cout << "Unknown instruction: 0x" << hex << (uint32_t)op << endl;
 			exit(1);
 		}
 		
@@ -623,6 +654,8 @@ class JavaExecutor {
 
 		MethodEntry* method = get_method(method_name);
 		struct CodeAttribute* codeattr = get_code_attribute(method, method_name);
+
+		cout << "[" << method_name << "] " << "Length of LVA: " << codeattr->max_locals << endl;
 		
 		uint8_t* code = get_code(method);
 		
